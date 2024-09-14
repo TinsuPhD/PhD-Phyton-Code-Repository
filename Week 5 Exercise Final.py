@@ -10,9 +10,10 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import classification_report
 
 # Load datasets (assuming they are saved locally)
-train = pd.read_csv('C:/PhD/4. TIM-8555/Week 5/train.csv')
-test = pd.read_csv('C:/PhD/4. TIM-8555/Week 5/test.csv')
-
+#train = pd.read_csv('C:/PhD/4. TIM-8555/Week 5/train.csv')
+#test = pd.read_csv('C:/PhD/4. TIM-8555/Week 5/test.csv')
+train = pd.read_csv('/kaggle/input/playground-series-s4e2/train.csv')
+test = pd.read_csv('/kaggle/input/playground-series-s4e2/test.csv')
 # Display the first few rows of the datasets
 print("Train Dataset Sample:\n", train.head())
 print("Test Dataset Sample:\n", test.head())
