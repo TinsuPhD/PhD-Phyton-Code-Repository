@@ -3,6 +3,7 @@
 
 #1. Store Sales Time Series Forecasting
 
+# Store Sales - Time Series Forecasting
 # Import necessary libraries
 import pandas as pd
 import numpy as np
@@ -11,169 +12,89 @@ from statsmodels.tsa.exponential_smoothing.ets import ETSModel as ets
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.arima.model import ARIMA
 
-# Data: Australian tourists count over several quarters
-austourists_data = [
-    30.05251300, 19.14849600, 25.31769200, 27.59143700,
-    32.07645600, 23.48796100, 28.47594000, 35.12375300,
-    36.83848500, 25.00701700, 30.72223000, 28.69375900,
-    36.64098600, 23.82460900, 29.31168300, 31.77030900,
-    35.17787700, 19.77524400, 29.60175000, 34.53884200,
-    41.27359900, 26.65586200, 28.27985900, 35.19115300,
-    42.20566386, 24.64917133, 32.66733514, 37.25735401,
-    45.24246027, 29.35048127, 36.34420728, 41.78208136,
-    49.27659843, 31.27540139, 37.85062549, 38.83704413,
-    51.23690034, 31.83855162, 41.32342126, 42.79900337,
-    55.70835836, 33.40714492, 42.31663797, 45.15712257,
-    59.57607996, 34.83733016, 44.84168072, 46.97124960,
-    60.01903094, 38.37117851, 46.97586413, 50.73379646,
-    61.64687319, 39.29956937, 52.67120908, 54.33231689,
-    66.83435838, 40.87118847, 51.82853579, 57.49190993,
-    65.25146985, 43.06120822, 54.76075713, 59.83447494,
-    73.25702747, 47.69662373, 61.09776802, 66.05576122
-]
+# Load the transactions dataset (assuming the dataset has a 'transactions' column)
+data = pd.read_csv('/kaggle/input/store-sales-time-series-forecasting/transactions.csv', parse_dates = ['date'], index_col='date')
 
-# Index of the time series (quarterly frequency, starting from 1999-03)
-index = pd.date_range("1999-03-01", "2015-12-01", freq="3MS")
-austourists = pd.Series(austourists_data, index=index)
+# Ensure the data contains only the 'transactions' column (if there are additional columns)
+data = data[['transactions']]  # Keep only the 'transactions' column
 
-# Verify that the 'austourists' series is correctly defined
-print(austourists.head())  # Check the first few values
+# Resampling the data to monthly frequency and summing values
+data = data.resample('MS').sum()  # 'MS' for start of the month, not 'M'
 
-# Plot the time series to ensure everything works
-austourists.plot()
-plt.ylabel("Australian Tourists")
-plt.title("Australian Tourists Over Time")
+# Verify the time series is 1-dimensional
+print(data.head())
+
+# Plot the time series to visualize the data
+data.plot()
+plt.ylabel("Store Transactions")
+plt.title("Store Transactions Over Time")
 plt.show()
 
-# Splitting into training and test sets
-mytrain = austourists[0:56]  # Training set
-mytest = austourists[56:69]  # Test set
+# Now proceed with the model training and forecasting as before
+# Split the dataset into training and testing sets
+train = data.iloc[:-12]  # Use all but the last 12 months for training
+test = data.iloc[-12:]   # Use the last 12 months for testing
 
 # Additive ETS Model Forecast
-# Fit an additive ETS (Error-Trend-Seasonality) model in statsmodels
-model = ets(mytrain, error="add", trend="add", seasonal="add", damped_trend=True, seasonal_periods=4)
-fit = model.fit()
+model_ets = ets(train['transactions'], error="add", trend="add", seasonal="add", damped_trend=True, seasonal_periods=12)
+fit_ets = model_ets.fit()
 
-# Get predictions from the model for the test period
-pred = fit.get_prediction(start="2013-03-01", end="2015-12-01")
-df = pred.summary_frame(alpha=0.05)  # Confidence interval
+# Get predictions from the ETS model for the test period
+pred_ets = fit_ets.get_prediction(start=test.index[0], end=test.index[-1])
+ets_df = pred_ets.summary_frame(alpha=0.05)
+ets_df['test'] = test['transactions']
 
-# Add the test values for comparison
-df['test'] = mytest
-
-# Plot the actual data, fitted values, and forecasts
-austourists.plot(label="Y", color='black')
-plt.ylabel("Australian Tourists")
-fit.fittedvalues.plot(label="Fitted (ETS)", color='blue')
-df['test'].plot(label='Test (Actual)', color='red')
-df['mean'].plot(label='Forecast', color='green')
+# Plot the actual data, fitted values, and forecasts for ETS model
+data['transactions'].plot(label="Actual", color='black')
+fit_ets.fittedvalues.plot(label="Fitted (ETS)", color='blue')
+ets_df['test'].plot(label='Test (Actual)', color='red')
+ets_df['mean'].plot(label='Forecast (ETS)', color='green')
 plt.legend()
-plt.title("ETS Model: Actual vs Forecasted Tourists")
+plt.title("ETS Model: Actual vs Forecasted Transactions")
 plt.show()
 
-# Multiplicative ETS Model Forecast
-# Fit a multiplicative ETS model in statsmodels
-model = ets(mytrain, error="mul", trend="mul", seasonal="mul", damped_trend=True, seasonal_periods=4)
-fit = model.fit()
-pred = fit.get_prediction(start="2013-03-01", end="2015-12-01")
-df2 = pred.summary_frame()
-df2['test'] = mytest
+# ARIMA Model Forecast
+# Plot the ACF and PACF to help in ARIMA order selection
+plot_acf(train)
+plot_pacf(train)
+plt.show()
 
-# Plot the actual data, fitted values, and forecasts for multiplicative model
-austourists.plot(label="Y")
-plt.ylabel("Australian Tourists")
-fit.fittedvalues.plot(label="ETS(MMM)")
-df2['test'].plot(label='Test y')
-df2['mean'].plot(label='Forecast y')
+# Fit an ARIMA model
+model_arima = ARIMA(train, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12))
+fit_arima = model_arima.fit()
+
+# Get predictions from the ARIMA model for the test period
+pred_arima = fit_arima.get_prediction(start=test.index[0], end=test.index[-1])
+arima_df = pred_arima.summary_frame()
+arima_df['test'] = test
+
+# Plot the actual data, fitted values, and forecasts for ARIMA model
+data.plot(label="Actual", color='black')
+fit_arima.fittedvalues.plot(label="Fitted (ARIMA)", color='blue')
+arima_df['test'].plot(label='Test (Actual)', color='red')
+arima_df['mean'].plot(label='Forecast (ARIMA)', color='green')
 plt.legend()
-plt.title("ETS Model: Actual vs Forecasted Tourists (Multiplicative)")
+plt.title("ARIMA Model: Actual vs Forecasted Transactions")
 plt.show()
 
 # Metrics Calculation
-def myf(mytest, ypred):
-    error = mytest - ypred
+def calculate_metrics(test, y_pred):
+    error = test - y_pred
     MSE = np.mean(error**2)
     RMSE = np.sqrt(MSE)
     MAE = np.mean(np.abs(error))
-    MAPE = np.mean(np.abs(error) / mytest)
+    MAPE = np.mean(np.abs(error) / test)
     ME = np.mean(error)
-    MPE = np.mean((mytest - ypred) / mytest)
-    answer = [MSE, RMSE, MAE, MAPE, ME, MPE]
-    names = ["MSE", "RMSE", "MAE", "MAPE", "ME", "MPE"]
-    myanswer = dict(zip(names, answer))
-    return myanswer
+    MPE = np.mean((test - y_pred) / test)
+    return {"MSE": MSE, "RMSE": RMSE, "MAE": MAE, "MAPE": MAPE, "ME": ME, "MPE": MPE}
 
-# Call the function with mytest (actual test values) and predicted values
-m1 = myf(mytest, df['mean'])
-m2 = myf(mytest, df2['mean'])
+# Calculate the error metrics for ETS and ARIMA models
+ets_metrics = calculate_metrics(test, ets_df['mean'])
+arima_metrics = calculate_metrics(test, arima_df['mean'])
 
 # Create a DataFrame to compare the results
-newdf = pd.DataFrame([m1, m2])
-print(newdf)
-
-# Autoregressive Integrated Moving Average (ARIMA) Model
-
-# Plot the ACF and PACF
-plot_acf(austourists)
-plot_pacf(austourists)
-plt.show()
-
-# Fit an ARIMA model and forecast
-model = ARIMA(mytrain, order=(1, 1, 1))
-fit = model.fit()
-pred = fit.get_prediction(start="2013-03-01", end="2015-12-01")
-df3 = pred.summary_frame()
-df3['test'] = mytest
-
-# Plot the actual data, fitted values, and forecasts for ARIMA model
-austourists.plot(label="Y")
-plt.ylabel("Australian Tourists")
-fit.fittedvalues.plot(label="ARIMA(1,1,1)")
-df3['test'].plot(label='Test y')
-df3['mean'].plot(label='Forecast y')
-plt.legend()
-plt.title("ARIMA Model: Actual vs Forecasted Tourists")
-plt.show()
-
-model = ARIMA(mytrain, order=(1,1,1), seasonal_order=(1,1,1,4),)
-fit = model.fit()
-pred = fit.get_prediction(start="2013-03-01", end="2015-12-01")
-df4 = pred.summary_frame()
-df4['test']=mytest
-austourists.plot(label="Y")
-plt.ylabel("Australian Tourists")
-fit.fittedvalues.plot(label="ETS(AAA)")
-df4['test'].plot(label='Test y')
-df4['mean'].plot(label='Forecast y')
-plt.legend()
-
-# Define the custom function to calculate various error metrics
-def myf(mytest, ypred):
-    error = sum(mytest - ypred)
-    MSE = error ** 2
-    RMSE = MSE ** 0.5
-    MAE = np.mean(np.abs(error))
-    MAPE = np.mean((np.abs(mytest - ypred) / mytest))
-    ME = np.mean(error)
-    MPE = np.mean((mytest - ypred) / mytest)
-    answer = [MSE, RMSE, MAE, MAPE, ME, MPE]
-    names = ["MSE", "RMSE", "MAE", "MAPE", "ME", "MPE"]
-    myanswer = dict(zip(names, answer))
-    return myanswer
-
-# Calculate error metrics for multiple models
-m1 = myf(mytest, df['mean'])
-m2 = myf(mytest, df2['mean'])
-m3 = myf(mytest, df3['mean'])
-m4 = myf(mytest, df4['mean'])
-
-# Create a DataFrame to store the results
-newdf = pd.DataFrame([m1, m2, m3, m4])
-newdf.index = ['ETS(AAA)', 'ETS(MMM)', 'ARIMA(1,1,1)', 'ARIMA(1,1,1)(1,1,1)[4]']
-
-# Display the DataFrame with error metrics for each model
-print(newdf)
-
+metrics_df = pd.DataFrame([ets_metrics, arima_metrics], index=["ETS", "ARIMA"])
+print(metrics_df)
 
 
 #2 House Price Prediction
